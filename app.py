@@ -1,6 +1,8 @@
 from typing import DefaultDict
 from mikrus_api_console.console import MikrusCMD
 from mikrus_api_console.console_utils import print_error
+
+from modules.Shell import ShellModule
 from getpass import getpass
 from os import environ
 from sys import exit
@@ -14,5 +16,8 @@ if __name__=="__main__":
         exit(1)
     MikrusCMD(
         api_key=MIKRUS_API,
-        srv=MIKRUS_SRV
+        srv=MIKRUS_SRV,
+        plugins=[
+            ShellModule
+        ]
     ).cmdloop()

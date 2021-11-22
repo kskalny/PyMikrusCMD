@@ -1,7 +1,9 @@
 from cmd import Cmd
 from os import error
+from typing import List
 from requests import post
 from sys import exit
+from mikrus_api_console.console_plugin import MikrusCMDPlugin
 from mikrus_api_console.console_utils import print_error, print_exec_response, print_info, print_with_colors
 from pprint import pprint
 
@@ -57,6 +59,7 @@ def print_raw(*args, response=None):
 class MikrusCMD(Cmd):
     __api_key:str
     __srv:str
+    __plugins:List[MikrusCMDPlugin] = []
 
     @property
     def prompt(self):
@@ -78,8 +81,19 @@ class MikrusCMD(Cmd):
         if response.status_code == 403:
             raise ApiException(response.text)
         return response
-        
-    def __init__(self, api_key:str, srv:str, plugins:list=None) -> None:
+
+    def __load_plugins(self, plugins):
+        for plugin in plugins:
+            self.__plugins.append(plugin(self))  
+
+    def __init_plugins(self):
+        for plugin in self.__plugins:
+            for command in plugin.commands:
+                plugin_command_name = plugin.name.replace(' ','_').lower()
+                setattr(self, f'do_{plugin_command_name}_{command.__name__}',command) 
+
+
+    def __init__(self, api_key:str, srv:str, plugins:List[MikrusCMDPlugin]=None) -> None:
         self.__api_key = api_key
         self.__srv = srv
         for (path, description) in ENDPOINTS:
@@ -91,6 +105,11 @@ class MikrusCMD(Cmd):
             command_raw = command + '_raw'
             setattr(self, command_raw, api_call(self, path+".raw")(print_raw))
             getattr(self, command_raw).__doc__ = '[RAW]' + description.title()
+
+     
+
+        self.__load_plugins(plugins)
+        self.__init_plugins()
         print("Witaj administratorze!")
         try:
             self.do_expires()
@@ -152,7 +171,7 @@ STORAGE:\t{data['expires_storage']}
         if output_lines:
             exit_code = int(output_lines[-1])
 
-            print_exec_response("".join(output_lines[:-1]), exit_code)
+            print_exec_response("\n".join(output_lines[:-1]), exit_code)
         else:
             print_error("Coś poszło nie tak i nie było mnie słychać!")
 
