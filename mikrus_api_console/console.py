@@ -2,7 +2,7 @@ from cmd import Cmd
 from os import error
 from requests import post
 from sys import exit
-from mikrus_api_console.console_utils import print_error, print_info, print_with_colors
+from mikrus_api_console.console_utils import print_error, print_exec_response, print_info, print_with_colors
 from pprint import pprint
 
 class ApiException(Exception):
@@ -19,12 +19,14 @@ ENDPOINTS = [
 /logs       - podgląd ostatnich logów [10 sztuk]
 /amfetamina - uruchamia amfetaminę na serwerze (zwiększenie parametrów)
 /db         - zwraca dane dostępowe do baz danych (cache=60s);
-/exec       - wywołuje polecenie/polecenia wysłane w zmiennej 'cmd' (POST) 
 /stats      - statystyki użycia dysku, pamięci, uptime itp. (cache=60s)
 /porty      - zwraca przypisane do Twojego serwera porty TCP/UDP (cache=60s)\
 """.splitlines()))
 ]
-
+#Commands to patch
+"""
+/exec       - wywołuje polecenie/polecenia wysłane w zmiennej 'cmd' (POST) 
+"""
 
 def api_call(mikrus, endpoint):
     def inner(func):
@@ -60,7 +62,7 @@ class MikrusCMD(Cmd):
     def prompt(self):
         return f'{self.__srv}> '
 
-    def api_action(self, endpoint):
+    def api_action(self, endpoint, additional_data={}):
         response = post(
                 f'{API_URL}/{endpoint}',
                 headers={
@@ -69,12 +71,14 @@ class MikrusCMD(Cmd):
                 },
                 data={
                     'key':self.__api_key,
-                    'srv':self.__srv
+                    'srv':self.__srv,
+                    **additional_data
                 }
             )
         if response.status_code == 403:
             raise ApiException(response.text)
         return response
+        
     def __init__(self, api_key:str, srv:str, plugins:list=None) -> None:
         self.__api_key = api_key
         self.__srv = srv
@@ -138,6 +142,25 @@ STORAGE:\t{data['expires_storage']}
 ''',{}
             )]
         )
+
+    def do_exec(self, input:str='', response=None):
+        response = self.api_action('/exec', additional_data={
+            'cmd':input.strip()+';echo $?;'
+        })
+        
+        output_lines = response.json().get('output').replace('\\n','\n').splitlines()
+        if output_lines:
+            exit_code = int(output_lines[-1])
+
+            print_exec_response("".join(output_lines[:-1]), exit_code)
+        else:
+            print_error("Coś poszło nie tak i nie było mnie słychać!")
+
+    def do_shell(self, input:str=''):
+        """
+        Alias fo exec
+        """
+        self.do_exec(input)
 
     def do_exit(self, input:str='',):
         '''
